@@ -205,17 +205,34 @@ group by ol.OrderID, ol.StockItemID
 
 
 --13.
-/*
-select * from Sales.SpecialDeals
-select * from Warehouse.StockGroups
-select * from Warehouse.StockItemStockGroups
-select * from Warehouse.StockItems
-select * from Purchasing.PurchaseOrderLines
-select * from Purchasing.PurchaseOrders
-select * from Sales.OrderLines
-select * from Sales.Orders
-*/
 
+--select * from Sales.SpecialDeals
+--select * from Warehouse.StockGroups
+--select * from Warehouse.StockItemStockGroups
+--select * from Warehouse.StockItems
+--select * from Purchasing.PurchaseOrderLines
+--select * from Purchasing.PurchaseOrders
+--select * from Sales.OrderLines
+--select * from Sales.Orders
+
+select p.StockGroupName, p.total_purchase, s.total_sale,
+       p.total_purchase - s.total_sale as remaining_stock
+from
+(
+select sg.StockGroupName, 
+        sum(pol.OrderedOuters * i.QuantityPerOuter) as total_purchase
+from Purchasing.PurchaseOrderLines pol left join Warehouse.StockItems i on i.StockItemID = pol.StockItemID
+                                       join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = pol.StockItemID
+									   join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+group by sg.StockGroupName
+) p left join
+(
+select sg.StockGroupName, 
+        sum(ol.Quantity) as total_sale
+from Sales.OrderLines ol left join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = ol.StockItemID
+									   join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+group by sg.StockGroupName
+) s on p.StockGroupName= s.StockGroupName
 
 
 --14.
@@ -257,5 +274,13 @@ from Application.Cities c
 )temp_cities left join cte on temp_cities.CityID = cte.CityID
 
 --15.
-select OrderID,ReturnedDeliveryData,ConfirmedDeliveryTime
-from Sales.Invoices
+select distinct(inv.OrderID)
+from Sales.Invoices inv
+where inv.ReturnedDeliveryData like '%Receiver not present%'
+
+--16.
+select distinct si.StockItemID, si.StockItemName
+from warehouse.StockItems for system_time all si
+where si.CustomFields like '%China%'
+
+--17.select sti.manufacturing_country,       sum(ol.Quantity) as total_quantityfrom Sales.OrderLines ol left join (select  *,        substring(si.CustomFields,Patindex('%": "%',si.CustomFields) + len('": "') ,                   Patindex('%", "%',si.CustomFields) - (Patindex('%": "%',si.CustomFields) + len('": "'))   )		as manufacturing_countryfrom  Warehouse.StockItems si ) sti on ol.StockItemID = sti.StockItemID                           left join Sales.Orders o on o.OrderID = ol.OrderIDwhere year(o.OrderDate) = 2015group by sti.manufacturing_country
