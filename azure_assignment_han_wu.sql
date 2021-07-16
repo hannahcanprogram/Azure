@@ -283,4 +283,16 @@ select distinct si.StockItemID, si.StockItemName
 from warehouse.StockItems for system_time all si
 where si.CustomFields like '%China%'
 
---17.select sti.manufacturing_country,       sum(ol.Quantity) as total_quantityfrom Sales.OrderLines ol left join (select  *,        substring(si.CustomFields,Patindex('%": "%',si.CustomFields) + len('": "') ,                   Patindex('%", "%',si.CustomFields) - (Patindex('%": "%',si.CustomFields) + len('": "'))   )		as manufacturing_countryfrom  Warehouse.StockItems si ) sti on ol.StockItemID = sti.StockItemID                           left join Sales.Orders o on o.OrderID = ol.OrderIDwhere year(o.OrderDate) = 2015group by sti.manufacturing_country
+--17.
+select sti.manufacturing_country, sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol left join (
+	select  *,
+	         substring(si.CustomFields,Patindex('%": "%',si.CustomFields) + len('": "') ,
+                   Patindex('%", "%',si.CustomFields) - (Patindex('%": "%',si.CustomFields) + len('": "'))   )
+		as manufacturing_country
+from  Warehouse.StockItems si 
+) sti on ol.StockItemID = sti.StockItemID
+                           left join Sales.Orders o on o.OrderID = ol.OrderID
+where year(o.OrderDate) = 2015
+group by sti.manufacturing_country
+
