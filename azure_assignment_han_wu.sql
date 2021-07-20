@@ -225,7 +225,7 @@ from Purchasing.PurchaseOrderLines pol left join Warehouse.StockItems i on i.Sto
                                        join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = pol.StockItemID
 									   join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
 group by sg.StockGroupName
-) p left join
+) p join
 (
 select sg.StockGroupName, 
         sum(ol.Quantity) as total_sale
@@ -299,3 +299,67 @@ where year(o.OrderDate) = 2015
 group by sti.manufacturing_country
 
 --18.
+create view stockgoups
+as
+select StockGroupName,[2013],[2014],[2015],[2016],[2017]
+from
+(
+select sg.StockGroupName as StockGroupName, year(o.OrderDate) as years, sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol join sales.Orders o on ol.OrderID = o.OrderID
+                         join Warehouse.StockItems i on ol.StockItemID = i.StockItemID
+						 join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = ol.StockItemID
+						 join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+where year(o.OrderDate) in ( 2013, 2014, 2015, 2016, 2017)
+group by sg.StockGroupName, year(o.OrderDate)
+) p
+pivot
+(
+sum(p.total_quantity) 
+for years in
+([2013],[2014],[2015],[2016],[2017]) 
+)as pivotTable
+
+--19.
+
+select years, 'Clothing', 'USB Novelties', 'Computing Noveilties','Airline Novelties', 'Novelty Items','T-Shirts', 'Mugs','Furry Footwear','Toys', 'Packaging Materials'
+from
+(
+select year(o.OrderDate) as years, sg.StockGroupName as StockGroupName, sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol join sales.Orders o on ol.OrderID = o.OrderID
+                         join Warehouse.StockItems i on ol.StockItemID = i.StockItemID
+						 join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = ol.StockItemID
+						 join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+where year(o.OrderDate) in ( 2013, 2014, 2015, 2016, 2017)
+group by sg.StockGroupName, year(o.OrderDate)
+) p
+pivot
+(
+sum(p.total_quantity)
+for StockGroupName in ('Clothing', 'USB Novelties', 'Computing Noveilties','Airline Novelties', 'Novelty Items','T-Shirts', 'Mugs','Furry Footwear','Toys', 'Packaging Materials')
+) as pivotTable2
+
+
+--20.
+create function invoicetotal(@invoiceId int)
+returns table
+as
+return
+(
+    select p.total_quantity
+	from
+	(
+	select i.InvoiceID, sum(il.Quantity * il.UnitPrice) as total_quantity
+    from  Sales.Invoices i left join Sales.InvoiceLines il on il.InvoiceID = i.InvoiceID 
+	    --input is invoice id so use left join to include all invoice id
+    where i.InvoiceID = @invoiceId
+    group by i.InvoiceID
+	) p
+);
+
+select * , 
+      ( select * from invoicetotal(i.InvoiceID)) order_total
+	from Sales.Invoices i
+
+
+--21.
+
