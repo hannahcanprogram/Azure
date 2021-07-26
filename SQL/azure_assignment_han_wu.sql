@@ -206,15 +206,6 @@ group by ol.OrderID, ol.StockItemID
 
 --13.
 
---select * from Sales.SpecialDeals
---select * from Warehouse.StockGroups
---select * from Warehouse.StockItemStockGroups
---select * from Warehouse.StockItems
---select * from Purchasing.PurchaseOrderLines
---select * from Purchasing.PurchaseOrders
---select * from Sales.OrderLines
---select * from Sales.Orders
-
 select p.StockGroupName, p.total_purchase, s.total_sale,
        p.total_purchase - s.total_sale as remaining_stock
 from
@@ -289,6 +280,22 @@ select sti.manufacturing_country,
 from Sales.OrderLines ol left join 
 (
 select  *,
+        json_value(si.CustomFields,'$.CountryOfManufacture')
+		as manufacturing_country
+from  Warehouse.StockItems si 
+) sti on ol.StockItemID = sti.StockItemID
+                           left join Sales.Orders o on o.OrderID = ol.OrderID
+where year(o.OrderDate) = 2015
+group by sti.manufacturing_country
+
+
+--Alternatively by indexing on Char
+
+select sti.manufacturing_country,
+       sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol left join 
+(
+select  *,
         substring(si.CustomFields,Patindex('%": "%',si.CustomFields) + len('": "') ,
                    Patindex('%", "%',si.CustomFields) - (Patindex('%": "%',si.CustomFields) + len('": "'))   )
 		as manufacturing_country
@@ -299,6 +306,7 @@ where year(o.OrderDate) = 2015
 group by sti.manufacturing_country
 
 --18.
+
 create view stockgoups
 as
 select StockGroupName,[2013],[2014],[2015],[2016],[2017]
@@ -320,8 +328,7 @@ for years in
 )as pivotTable
 
 --19.
-
-select years, 'Clothing', 'USB Novelties', 'Computing Noveilties','Airline Novelties', 'Novelty Items','T-Shirts', 'Mugs','Furry Footwear','Toys', 'Packaging Materials'
+select years, [Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials]
 from
 (
 select year(o.OrderDate) as years, sg.StockGroupName as StockGroupName, sum(ol.Quantity) as total_quantity
@@ -335,11 +342,12 @@ group by sg.StockGroupName, year(o.OrderDate)
 pivot
 (
 sum(p.total_quantity)
-for StockGroupName in ('Clothing', 'USB Novelties', 'Computing Noveilties','Airline Novelties', 'Novelty Items','T-Shirts', 'Mugs','Furry Footwear','Toys', 'Packaging Materials')
+for StockGroupName in ([Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials])
 ) as pivotTable2
 
 
 --20.
+
 create function invoicetotal(@invoiceId int)
 returns table
 as
@@ -363,3 +371,267 @@ select * ,
 
 --21.
 
+create table Orders2
+(
+orderdate date not null,
+orderid int ,
+customerid int ,
+totalquantity int
+);
+drop procedure dateorder
+create procedure dateorder
+@orderdate date
+as
+  begin try
+  SET NOCOUNT ON
+    begin tran
+    insert into Orders2
+    select o.OrderDate, o.OrderID, o.CustomerID,sum(ol.Quantity) as total_quantity
+    from Sales.OrderLines ol join Sales.Orders o on ol.OrderID = o.OrderID
+    where o.OrderDate = @orderdate 
+	group by o.OrderID, o.CustomerID,o.OrderDate
+	commit tran
+  end try
+  begin catch
+     SELECT ERROR_MESSAGE() AS [Error Message]
+	 if @orderdate in (select orderdate from Orders2)
+	   rollback tran;
+     else
+	   commit tran;
+  end catch
+
+--try 2016-03-03 2016-03-04 2016-03-05 2016-03-07 
+exec dateorder @orderdate = '2013-01-01'
+exec dateorder @orderdate = '2016-03-03'
+exec dateorder @orderdate = '2016-03-05'
+exec dateorder @orderdate = '2016-03-07'
+exec dateorder @orderdate = '2016-03-05'
+select * from odsOrders
+--22.
+
+select  StockItemID, 
+        StockItemName, 
+		SupplierID,
+		ColorID,
+		UnitPackageID, 
+		OuterPackageID, 
+		Brand, 
+		Size, 
+		LeadTimeDays, 
+		QuantityPerOuter, 
+		IsChillerStock, 
+		Barcode, 
+		TaxRate, 
+		UnitPrice, 
+		RecommendedRetailPrice, 
+		TypicalWeightPerUnit, 
+		MarketingComments, 
+		InternalComments, 
+		json_value(CustomFields,'$.CountryOfManufacture') as CountryOfManufacture,
+		json_value(CustomFields,'$.Range') as Range, 
+		json_value(CustomFields,'$.ShelfLife') as Shelflife 
+into odsStockItem
+from Warehouse.StockItems
+
+--23.
+
+create table odsOrders
+(
+orderdate date not null,
+orderid int ,
+customerid int ,
+totalquantity int
+);
+
+
+create procedure dateorder
+@orderdate date
+as
+  begin try
+  SET NOCOUNT ON
+    begin tran
+    insert into odsOrders
+    select o.OrderDate, o.OrderID, o.CustomerID,sum(ol.Quantity) as total_quantity
+    from Sales.OrderLines ol join Sales.Orders o on ol.OrderID = o.OrderID
+    where o.OrderDate between @orderdate and dateadd(dd,7,@orderdate)
+	group by o.OrderID, o.CustomerID,o.OrderDate
+	except
+	select o.OrderDate, o.OrderID, o.CustomerID,sum(ol.Quantity) as total_quantity
+    from Sales.OrderLines ol join Sales.Orders o on ol.OrderID = o.OrderID
+    where o.OrderDate between @orderdate and dateadd(dd,-7,@orderdate)
+	group by o.OrderID, o.CustomerID,o.OrderDate
+	commit tran
+  end try
+  begin catch
+     SELECT ERROR_MESSAGE() AS [Error Message]
+	 if @orderdate in (select orderdate from odsOrders)
+	   rollback tran;
+     else
+	   commit tran;
+  end catch
+
+
+  --24.
+declare @json nvarchar(max) = N'[
+{
+   "PurchaseOrders":[
+      {
+         "StockItemName":"Panzer Video Game",
+         "Supplier":"7",
+         "UnitPackageId":"1",
+         "OuterPackageId":[
+            6,
+            7
+         ],
+         "Brand":"EA Sports",
+         "LeadTimeDays":"5",
+         "QuantityPerOuter":"1",
+         "TaxRate":"6",
+         "UnitPrice":"59.99",
+         "RecommendedRetailPrice":"69.99",
+         "TypicalWeightPerUnit":"0.5",
+         "CountryOfManufacture":"Canada",
+         "Range":"Adult",
+         "OrderDate":"2018-01-01",
+         "DeliveryMethod":"Post",
+         "ExpectedDeliveryDate":"2018-02-02",
+         "SupplierReference":"WWI2308"
+      },
+      {
+         "StockItemName":"Panzer Video Game",
+         "Supplier":"5",
+         "UnitPackageId":"1",
+         "OuterPackageId":"7",
+         "Brand":"EA Sports",
+         "LeadTimeDays":"5",
+         "QuantityPerOuter":"1",
+         "TaxRate":"6",
+         "UnitPrice":"59.99",
+         "RecommendedRetailPrice":"69.99",
+         "TypicalWeightPerUnit":"0.5",
+         "CountryOfManufacture":"Canada",
+         "Range":"Adult",
+         "OrderDate":"2018-01-025",
+         "DeliveryMethod":"Post",
+         "ExpectedDeliveryDate":"2018-02-02",
+         "SupplierReference":"269622390"
+      }
+   ]
+}
+]'
+
+
+select * 
+from openjson(@json)
+with(
+          StockItemName  VARCHAR    '$.StockItemName',
+		  SupplierID int '$.Supplier',
+		  UnitPackageID int '$.UnitPackageId',
+		  OuterPackageId int '$.OuterPackageId',
+		  Brand nvarchar '$.Brand',
+		  LeadTimeDays int '$.LeadTimeDays',
+		  QuantityPerOuter int '$.QuantityPerOuter',
+		  TaxRate decimal '$.TaxRate',
+		  UnitPrice decimal '$.UnitPrice',
+		  RecommendedRetailPrice decimal '$.RecommendedRetailPrice',
+		  TypicalWeightPerUnit decimal '$.TypicalWeightPerUnit',
+		  [CustomFields] nvarchar '$.CountryOfManufacture',
+		  OrderDate date '$.OrderDate',
+		  DeliveryMethod nvarchar '$.DeliveryMethod',
+		  ExpectedDeliveryDate date '$.ExpectedDeliveryDate',
+		  SupplierReference nvarchar '$.SupplierReference'
+)
+
+-- continuing...
+
+--25.
+
+select years, [Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials]
+from
+(
+select year(o.OrderDate) as years, sg.StockGroupName as StockGroupName, sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol join sales.Orders o on ol.OrderID = o.OrderID
+                         join Warehouse.StockItems i on ol.StockItemID = i.StockItemID
+						 join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = ol.StockItemID
+						 join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+where year(o.OrderDate) in ( 2013, 2014, 2015, 2016, 2017)
+group by sg.StockGroupName, year(o.OrderDate)
+) p
+pivot
+(
+sum(p.total_quantity)
+for StockGroupName in ([Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials])
+) as pivotTable2
+for json path
+
+--26.
+
+select years, [Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials]
+from
+(
+select year(o.OrderDate) as years, sg.StockGroupName as StockGroupName, sum(ol.Quantity) as total_quantity
+from Sales.OrderLines ol join sales.Orders o on ol.OrderID = o.OrderID
+                         join Warehouse.StockItems i on ol.StockItemID = i.StockItemID
+						 join Warehouse.StockItemStockGroups ssg on ssg.StockItemID = ol.StockItemID
+						 join Warehouse.StockGroups sg on sg.StockGroupID = ssg.StockGroupID
+where year(o.OrderDate) in ( 2013, 2014, 2015, 2016, 2017)
+group by sg.StockGroupName, year(o.OrderDate)
+) p
+pivot
+(
+sum(p.total_quantity)
+for StockGroupName in ([Clothing], [USB Novelties], [Computing Noveilties],[Airline Novelties], [Novelty Items],[T-Shirts], [Mugs],[Furry Footwear],[Toys], [Packaging Materials])
+) as pivotTable2
+for xml auto
+
+--27.
+create procedure [dbo].[SaveInvoices](@date date, @cID int) as begin
+insert  dbo.ConfirmedDeviveryJson(value, date)
+(select (Select * from WideWorldImporters.Sales.Invoices i 
+join WideWorldImporters.Sales.InvoiceLines il on il.InvoiceID = i.InvoiceID
+and i.InvoiceDate = @date and i.CustomerID = @cID
+for json auto) as value, @date)
+end;
+
+-- adding customer dates information using a cursor
+select distinct i.InvoiceDate as dates into #dates
+from WideWorldImporters.Sales.Invoices i 
+where i.CustomerID = 1
+
+declare cur cursor for select dates from #dates
+declare @d date
+open cur fetch next from cur into @d
+
+while @@FETCH_STATUS = 0
+begin
+exec dbo.SaveInvoices @d
+fetch next from cur into @d
+end;
+close cur
+deallocate cur
+drop table #dates
+
+--34.
+use WideWorldImportersDW
+select * from Integration.Order_Staging
+select * from Integration.Lineage
+
+use WideWorldImporters
+select * from Sales.OrderLines
+select * from Sales.Orders
+select * from Sales.Customers
+select * from Warehouse.StockItems
+select * from Sales.Invoices
+select * from Sales.InvoiceLines
+
+select c.DeliveryCityID as City, c.CustomerID as Customer, si.StockItemID as StockItem, o.OrderDate as OrderDate, o.SalespersonPersonID as Salesperson,
+       sic.PackedByPersonID as Picker, o.BackorderOrderID as BackorderID, ol.Description as Description, pt.PackageTypeName as Package,
+	   ol.Quantity AS Quantity, ol.UnitPrice as UnitPrice, ol.TaxRate as TaxRate, ol.Quantity*ol.UnitPrice as TotalExcludingTax, 
+	    ol.Quantity*ol.UnitPrice*ol.TaxRate*0.01 as TaxAmount, ol.Quantity*ol.UnitPrice*(1+ol.TaxRate)*0.01 as TotalIncludingTax
+into #temp
+from Sales.OrderLines ol join Sales.Orders o on ol.OrderId = o.OrderId
+                         join Sales.Customers c on c.CustomerID = o.CustomerID
+						 join Warehouse.StockItems si on si.StockItemID = ol.StockItemID
+						 join Sales.Invoices sic on sic.OrderID = o.OrderID
+						 join Warehouse.PackageTypes pt on pt.PackageTypeID = ol.PackageTypeID
+ --continuing           
