@@ -605,11 +605,97 @@ open cur fetch next from cur into @d
 while @@FETCH_STATUS = 0
 begin
 exec dbo.SaveInvoices @d
-fetch next from cur into @d
+fetch next--Create new table contaning logon information and person information--
+drop table if exists #PersonNew
+go
+
+
+--31.
+create table #PersonNew(
+	PersonID int primary key not null,
+	Fullname nvarchar(50) not null,
+	IsPermittedToLogon bit not null,
+	LogonName nvarchar(50),
+	HashedPassword varbinary(max),
+	UserPreferences nvarchar(max),
+	PhoneNumber nvarchar(20),
+	FaxNumber nvarchar(20),
+	EmailAddress nvarchar(256),
+	Photo varbinary(max),
+	CustomFields nvarchar(max),
+	OtherLanguages nvarchar(max),
+	ValidFrom datetime2(7) not null,
+	ValidTo datetime2(7) not null
+	)
+go
+select * from #PersonNew
+
+use WideWorldImporters
+DECLARE @maxpersonid INT;
+SELECT @maxpersonid = MAX(p.PersonID)
+FROM Application.People p
+
+use AdventureWorks2019
+insert into #PersonNew
+select ROW_NUMBER() over(order by p.BusinessEntityID) + @maxpersonid as personID,
+COALESCE(p.FirstName, '') + ' ' + COALESCE(p.middlename, ' ') + COALESCE(p.lastname, '') as Fullname,
+1 as IsPermittedToLogon,
+e.EmailAddress as LogonName,
+cast(pw.PasswordSalt as varbinary)as HashedPassword,
+null as UserPreferences,
+pp.PhoneNumber as PhoneNumber,
+null as FaxNumber,
+e.EmailAddress as EmailAddress,
+null as Photo,
+null as CustomFields,
+null as OtherLanguages,
+GETDATE() as ValidFrom,
+CAST('12/31/9999 23:59:59.9999' as DATETIME2) as ValidTo
+from Person.Person p
+join Person.EmailAddress e
+on p.BusinessEntityID = e.BusinessEntityID
+join Person.PersonPhone pp
+on p.BusinessEntityID = pp.BusinessEntityID
+join Person.Password pw
+on p.BusinessEntityID = pw.BusinessEntityID
+go
+select * from #personnew
+
+
+--Create new table containing product information--
+drop table if exists #ProductNew
+go
+
+use WideWorldImporters
+DECLARE @maxproductid INT;
+DECLARE @maxsupplierid INT;
+SELECT @maxproductid = MAX(si.StockItemID), @maxsupplierid = MAX(si.SupplierID)
+FROM Warehouse.StockItems si
+
+use AdventureWorks2019
+select 
+p.ProductID + @maxproductid as StockItemID, 
+p.Name as StockItemName, 
+p.Color as Color, 
+pv.LastReceiptCost as UnitPrice, 
+p.ListPrice as ListPrice, 
+p.Size as Size, 
+ps.Name as Categories, 
+pv.BusinessEntityId + @maxsupplierid as SuplierID 
+into #ProductNew
+from Production.Product p
+join Production.ProductSubcategory ps
+on p.ProductSubcategoryID = ps.ProductSubcategoryID
+join Purchasing.ProductVendor pv
+on p.ProductID = pv.ProductID
+go
+
+select * from #ProductNewfrom cur into @d
 end;
 close cur
 deallocate cur
 drop table #dates
+
 
 --34.
 use WideWorldImportersDW
