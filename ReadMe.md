@@ -13,3 +13,6 @@ This is a repository for Azure Training Program, including sql and python assign
 
 ## Python folder includes
 * assignment 1
+
+## Databricks
+* exercise_01_07
