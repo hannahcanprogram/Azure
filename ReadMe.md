@@ -16,3 +16,6 @@ This is a repository for Azure Training Program, including sql and python assign
 
 ## Databricks
 * exercise_01_07
+* ETL for 8 movie json files 
+  * answer from notebook .jpynb
+  * .py function (ing)
